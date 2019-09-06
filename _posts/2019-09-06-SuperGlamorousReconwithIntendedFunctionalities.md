@@ -27,12 +27,9 @@ The discovery that the Smarty template engine for PHP was in use was definitely 
 After recovering from the realization that I would likely be left shell-less (just so sad), came the delightful deep dive into the Smarty developer docs. This actually yielded several quite notable and potential attacks for both this and other attacks (and the list below is by no means exhaustive or original?). 
 
 1.	Smarty has a wonderful built-in SSRF just waiting to SSRF things (A write-up for another time perhaps)! The “{fetch}” tag is ripe for the abuse. [Smarty Fetch API Documentation](https://www.smarty.net/docsv2/en/api.fetch.tpl)
-2.	Smarty has a built-in PHP reserved variable, "{$smarty}", that can be used to access environment and request variables. One of the variables that "{$smarty}" had access to was "cookies", which as the name indicates allows for Smarty to have access to a users' session cookies via HTTP.
-3.	Smarty “literal” tags.
-```{literal} tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where {curly braces} would interfere with the template delimiter syntax. Anything within {literal}{/literal} tags is not interpreted but displayed as-is.```
-4.	If enabled, a Smarty Debug Console exists ``{\$smarty.cookies|@debug_print_var}``
--	debug_print_var - formats variable contents for display in the console otherwise using the "{$smarty}" variables causes a popup window to display the desired values.
-[Smarty Debugging Console Documentation](https://www.smarty.net/docsv2/en/chapter.debugging.console.tpl)
+2.	Smarty has a built-in PHP reserved variable, ``{$smarty}``, that can be used to access environment and request variables. One of the variables that ``{$smarty}`` had access to was "cookies", which as the name indicates allows for Smarty to have access to a users' session cookies via HTTP.
+3.	Smarty “literal” tags. ``{literal}`` tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where ``{curly braces}`` would interfere with the template delimiter syntax. Anything within ``{literal}{/literal}`` tags is not interpreted but displayed as-is.
+4.	If enabled, a Smarty Debug Console exists ``{\$smarty.cookies|@debug_print_var}``. Note: debug_print_var formats variable contents for display in the console otherwise using the ``{$smarty}`` variables causes a popup window to display the desired values. [Smarty Debugging Console Documentation](https://www.smarty.net/docsv2/en/chapter.debugging.console.tpl)
 
 Next on the technological notes front, it was observed that anytime that an end user made changes to the application a different type of request, specifically a Direct Web Remoting (DWR) request was made to facilitate the changes. Additionally, each of these requests had multiple “Session” looking cookies including: DWRSESSIONID, JSESSIONID and scriptSessionId. Prior to this testing I had never seen Direct Web Remoting. An example “DWR” request follows.
 
