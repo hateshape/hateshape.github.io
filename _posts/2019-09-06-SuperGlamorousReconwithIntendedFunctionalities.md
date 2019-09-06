@@ -118,15 +118,9 @@ So to sum up the vulnerability, using a combination of features from the Smarty 
 2.	Through complaining about an issue to a more privileged user or via a more malevolent scenario, a high privileged user visits the stored payload stored by the aforementioned “medium-ish” privileged user where their Session data is leaked similar to the following screenshot.
 ![apache-access-log.png]({{site.baseurl}}/assets/media/posts/redacted/apache-access-log.png)
 
-3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server something along the lines of the following could be done to harvest the necessary items:
-``alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'``
-
-``for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these
-&& sed 's/"//g' these | sed 's/ => //g' > sessionvars`; done;``
-
-4.	Take the output from the console and insert the values in their appropriate positions in the “medium-ish” privileges malicious HTTP requests.
+3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server do some bashfu:
 ![sessionvars.png]({{site.baseurl}}/assets/media/posts/redacted/sessionvars.png)
 
-5.	And now using our “sessionvars” we can make privileged requests as an exploited user’s  privilege level. Here’s to hoping for full Admin privileges!
+4.	And now using our “sessionvars” we can make privileged requests as an exploited user’s  privilege level. Here’s to hoping for full Admin privileges!
 
 Unfortunately, while the investigation of the issue and resulting payload created were fantastic, alas, the program could not fix the issue based on a product management decision and customer requirements. So we are left with the obvious path of **¯\\_(ツ)_/¯** followed by moving on to the next sploit.
