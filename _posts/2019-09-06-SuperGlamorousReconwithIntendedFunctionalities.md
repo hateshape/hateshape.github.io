@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Null
+title: Super Glamorous Recon with Intended Functionalities
 categories: [general, exploits, demo]
 tags: [demo, dbyll, dbtek, setup]
 comments: true
